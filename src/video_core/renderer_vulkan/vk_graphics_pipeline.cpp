@@ -135,8 +135,22 @@ GraphicsPipeline::GraphicsPipeline(
         .negativeOneToOne = key.clip_space == AmdGpu::ClipSpace::MinusWToW,
     };
 
-    const vk::PipelineViewportStateCreateInfo viewport_info = {
+    const vk::DepthClampRangeEXT depth_clamp_range = {
+        .minDepthClamp = key.depth_clamp_min,
+        .maxDepthClamp = key.depth_clamp_max,
+    };
+    const vk::PipelineViewportDepthClampControlCreateInfoEXT clamp_control = {
         .pNext = instance.IsDepthClipControlSupported() ? &clip_control : nullptr,
+        .depthClampMode = vk::DepthClampModeEXT::eUserDefinedRange,
+        .pDepthClampRange = &depth_clamp_range,
+    };
+    const bool use_clamp_control =
+        instance.IsDepthClampControlSupported() && key.depth_clamp_enable;
+
+    const vk::PipelineViewportStateCreateInfo viewport_info = {
+        .pNext = use_clamp_control                        ? static_cast<const void*>(&clamp_control)
+                 : instance.IsDepthClipControlSupported() ? &clip_control
+                                                          : nullptr,
     };
 
     boost::container::static_vector<vk::DynamicState, 32> dynamic_states = {
