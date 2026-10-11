@@ -174,6 +174,12 @@ public:
     /// Reuploads image contents.
     void RefreshImage(Image& image);
 
+    void WriteBackImage(Image& image);
+
+    void WriteBackOverlaps(Image& image);
+
+    void MarkGpuWrite(ImageId image_id);
+
     /// Retrieves the sampler that matches the provided S# descriptor.
     [[nodiscard]] vk::Sampler GetSampler(const AmdGpu::Sampler& sampler,
                                          AmdGpu::BorderColorBuffer border_color_base,
@@ -383,6 +389,7 @@ private:
 
     /// Removes image from the cache and schedules it for deletion.
     void FreeImage(ImageId image_id) {
+        WriteBackImage(slot_images[image_id]);
         {
             std::scoped_lock lk{slot_images[image_id].mutex};
             UntrackImage(image_id);

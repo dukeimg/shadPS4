@@ -198,6 +198,7 @@ void TextureCache::InvalidateMemory(VAddr addr, size_t size) {
 
 void TextureCache::InvalidateMemoryFromGPU(VAddr address, size_t max_size) {
     ForEachImageInRegion(address, max_size, [&](ImageId image_id, Image& image) {
+        WriteBackImage(image);
         // Only consider images that match base address.
         // TODO: Maybe also consider subresources
         if (image.info.guest_address != address) {
@@ -225,6 +226,7 @@ void TextureCache::UnmapMemory(VAddr cpu_addr, size_t size) {
     ForEachImageInRegion(cpu_addr, size, [&](ImageId id, Image&) { deleted_images.push_back(id); });
     for (const ImageId id : deleted_images) {
         // TODO: Download image data back to host.
+        slot_images[id].flags &= ~ImageFlagBits::NeedsWriteBack;
         FreeImage(id);
     }
 }
@@ -683,6 +685,9 @@ ImageView& TextureCache::FindTexture(ImageId image_id, const ImageDesc& desc) {
         }
     }
     UpdateImage(image_id);
+    if (desc.type == BindingType::Storage) {
+        MarkGpuWrite(image_id);
+    }
     return image.FindView(desc.view_info);
 }
 
@@ -720,6 +725,7 @@ ImageView& TextureCache::FindRenderTarget(ImageId image_id, const ImageDesc& des
     }
     image.usage.render_target = 1u;
     UpdateImage(image_id);
+    MarkGpuWrite(image_id);
 
     // Register meta data for this color buffer
     const VAddr cmask_addr = desc.info.meta_info.cmask_addr;
@@ -758,6 +764,7 @@ ImageView& TextureCache::FindDepthTarget(ImageId image_id, const ImageDesc& desc
     image.flags |= ImageFlagBits::GpuModified;
     image.usage.depth_target = 1u;
     UpdateImage(image_id);
+    MarkGpuWrite(image_id);
 
     // Register meta data for this depth buffer
     const VAddr htile_addr = desc.info.meta_info.htile_addr;
@@ -872,6 +879,9 @@ void TextureCache::RefreshImage(Image& image) {
 
     scheduler.EndRendering();
 
+    image.flags &= ~ImageFlagBits::NeedsWriteBack;
+    WriteBackOverlaps(image);
+
     const auto [in_buffer, in_offset] =
         buffer_cache.ObtainBufferForImage(image.info.guest_address, image.info.guest_size);
     const auto [buffer, offset] = tile_manager.DetileImage(in_buffer, in_offset, image.info);
@@ -880,6 +890,41 @@ void TextureCache::RefreshImage(Image& image) {
     }
 
     runtime.UploadImage(&image, buffer, image_copies);
+}
+
+void TextureCache::WriteBackImage(Image& image) {
+    if (False(image.flags & ImageFlagBits::NeedsWriteBack)) {
+        return;
+    }
+    image.flags &= ~ImageFlagBits::NeedsWriteBack;
+    if (False(image.flags & ImageFlagBits::Dirty)) {
+        buffer_cache.WriteImageToMemory(slot_images.GetSlotId(image));
+    }
+}
+
+void TextureCache::WriteBackOverlaps(Image& image) {
+    ForEachImageInRegion(image.info.guest_address, image.info.guest_size,
+                         [&](ImageId, Image& overlap) {
+                             if (&overlap != &image) {
+                                 WriteBackImage(overlap);
+                             }
+                         });
+}
+
+void TextureCache::MarkGpuWrite(ImageId image_id) {
+    Image& image = slot_images[image_id];
+    if (True(image.flags & ImageFlagBits::NeedsWriteBack) || image.info.num_samples > 1) {
+        return;
+    }
+    ForEachImageInRegion(image.info.guest_address, image.info.guest_size,
+                         [&](ImageId overlap_id, Image& overlap) {
+                             if (overlap_id == image_id) {
+                                 return;
+                             }
+                             WriteBackImage(overlap);
+                             overlap.flags |= ImageFlagBits::GpuDirty;
+                         });
+    image.flags |= ImageFlagBits::NeedsWriteBack;
 }
 
 vk::Sampler TextureCache::GetSampler(const AmdGpu::Sampler& sharp,
