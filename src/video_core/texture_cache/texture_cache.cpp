@@ -196,6 +196,19 @@ void TextureCache::InvalidateMemory(VAddr addr, size_t size) {
     }
 }
 
+bool TextureCache::HasPendingWriteBack(VAddr addr, size_t size) {
+    bool pending = false;
+    ForEachImageInRegion(addr, size, [&](ImageId, Image& image) {
+        std::scoped_lock lk{image.mutex};
+        pending |= True(image.flags & ImageFlagBits::NeedsWriteBack);
+    });
+    return pending;
+}
+
+void TextureCache::WriteBackMemory(VAddr addr, size_t size) {
+    ForEachImageInRegion(addr, size, [&](ImageId, Image& image) { WriteBackImage(image); });
+}
+
 void TextureCache::InvalidateMemoryFromGPU(VAddr address, size_t max_size) {
     ForEachImageInRegion(address, max_size, [&](ImageId image_id, Image& image) {
         WriteBackImage(image);
