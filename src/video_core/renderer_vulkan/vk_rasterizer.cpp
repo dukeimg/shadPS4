@@ -1269,6 +1269,13 @@ bool Rasterizer::InvalidateMemory(VAddr addr, u64 size, bool assume_locks) {
         // Not GPU mapped memory, can skip invalidation logic entirely.
         return false;
     }
+    if (texture_cache.HasPendingWriteBack(addr, size)) {
+        if (assume_locks) {
+            texture_cache.WriteBackMemory(addr, size);
+        } else {
+            liverpool->SendCommand<true>([&] { texture_cache.WriteBackMemory(addr, size); });
+        }
+    }
     buffer_cache.InvalidateMemory(addr, size, assume_locks);
     texture_cache.InvalidateMemory(addr, size);
     return true;
