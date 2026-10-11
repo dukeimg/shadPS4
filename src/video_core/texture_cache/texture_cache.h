@@ -144,8 +144,8 @@ public:
     void UpdateImage(ImageId image_id) {
         Image& image = slot_images[image_id];
         TouchImage(image);
-        TrackImage(image_id);
         RefreshImage(image);
+        TrackImage(image);
     }
 
     /// Resolves overlap between existing cache image and pending merged image
@@ -353,6 +353,7 @@ private:
 
     /// Track CPU reads and writes for image
     void TrackImage(ImageId image_id);
+    void TrackImage(Image& image);
 
     /// Stop tracking CPU reads and writes for image
     void UntrackImage(ImageId image_id);
