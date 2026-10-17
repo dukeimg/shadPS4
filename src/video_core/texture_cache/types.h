@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <algorithm>
+
 #include "common/slot_vector.h"
 #include "common/types.h"
 
@@ -65,6 +67,14 @@ struct SubresourceExtent {
     u16 layers = 1;
 
     auto operator<=>(const SubresourceExtent&) const = default;
+
+    bool Contains(const SubresourceExtent& other) const {
+        return levels >= other.levels && layers >= other.layers;
+    }
+
+    static SubresourceExtent Max(const SubresourceExtent& a, const SubresourceExtent& b) {
+        return {std::max(a.levels, b.levels), std::max(a.layers, b.layers)};
+    }
 };
 
 struct SubresourceRange {
