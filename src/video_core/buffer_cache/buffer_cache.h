@@ -33,6 +33,7 @@ struct StagingBufferRef;
 
 namespace VideoCore {
 
+struct Image;
 class TextureCache;
 class MemoryTracker;
 class PageManager;
@@ -111,6 +112,8 @@ public:
     /// Attempts to obtain a buffer without modifying the cache contents.
     [[nodiscard]] std::pair<const Buffer*, u64> ObtainBufferForImage(VAddr device_addr, u32 size);
 
+    void WriteImageToMemory(Image& image);
+
     /// Return true when a region is modified from the CPU
     [[nodiscard]] bool IsRegionCpuModified(VAddr addr, size_t size);
 
@@ -151,6 +154,8 @@ private:
                            bool is_texel_buffer);
 
     bool SynchronizeMemoryFromImage(const Buffer* arena, VAddr device_addr, u32 size);
+
+    bool CopyImageToArena(Image& image, const Buffer* arena, u64 arena_offset);
 
     const Vulkan::Instance& instance;
     Vulkan::Scheduler& scheduler;

@@ -497,7 +497,16 @@ bool BufferCache::SynchronizeMemoryFromImage(const Buffer* arena, VAddr device_a
     ASSERT_MSG(device_addr == image.info.guest_address,
                "Texel buffer aliases image subresources {:x} : {:x}", device_addr,
                image.info.guest_address);
-    const u64 arena_offset = arena->Offset(device_addr);
+    return CopyImageToArena(image, arena, arena->Offset(device_addr));
+}
+
+void BufferCache::WriteImageToMemory(Image& image) {
+    const auto [arena, arena_offset] =
+        ObtainBuffer(image.info.guest_address, image.info.guest_size, ObtainBufferFlags::IsWritten);
+    CopyImageToArena(image, arena, arena_offset);
+}
+
+bool BufferCache::CopyImageToArena(Image& image, const Buffer* arena, u64 arena_offset) {
     boost::container::small_vector<vk::BufferImageCopy, 8> buffer_copies;
     for (u32 mip = 0; mip < image.info.resources.levels; mip++) {
         const auto& mip_info = image.info.mips_layout[mip];
