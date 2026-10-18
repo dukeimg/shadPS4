@@ -120,6 +120,10 @@ public:
     /// Invalidates any image in the logical page range.
     void InvalidateMemory(VAddr addr, size_t size);
 
+    bool HasPendingWriteBack(VAddr addr, size_t size);
+
+    void WriteBackMemory(VAddr addr, size_t size);
+
     /// Marks an image as dirty if it exists at the provided address.
     void InvalidateMemoryFromGPU(VAddr address, size_t max_size);
 
@@ -173,6 +177,12 @@ public:
 
     /// Reuploads image contents.
     void RefreshImage(Image& image);
+
+    void WriteBackImage(Image& image);
+
+    void WriteBackOverlaps(Image& image);
+
+    void MarkGpuWrite(ImageId image_id);
 
     /// Retrieves the sampler that matches the provided S# descriptor.
     [[nodiscard]] vk::Sampler GetSampler(const AmdGpu::Sampler& sampler,
@@ -383,6 +393,7 @@ private:
 
     /// Removes image from the cache and schedules it for deletion.
     void FreeImage(ImageId image_id) {
+        WriteBackImage(slot_images[image_id]);
         {
             std::scoped_lock lk{slot_images[image_id].mutex};
             UntrackImage(image_id);

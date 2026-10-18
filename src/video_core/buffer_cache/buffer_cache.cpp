@@ -466,8 +466,9 @@ bool BufferCache::SynchronizeMemory(const Buffer* arena, VAddr device_addr, u32 
     return false;
 }
 
-bool BufferCache::SynchronizeMemoryFromImage(const Buffer* arena, VAddr device_addr, u32 size) {
-    if (const auto meta = texture_cache.GetMetaInfo(device_addr)) {
+bool BufferCache::SynchronizeMemoryFromImage(const Buffer* arena, VAddr device_addr, u32 size,
+                                             ImageId image_id) {
+    if (const auto meta = texture_cache.GetMetaInfo(device_addr); meta && !image_id) {
         if (meta->type == TextureCache::MetaType::HTile) {
             static constexpr u32 ZmaskUncompressed = 0xf;
             runtime.FillBuffer(arena, arena->Offset(device_addr), size, ZmaskUncompressed);
@@ -489,7 +490,9 @@ bool BufferCache::SynchronizeMemoryFromImage(const Buffer* arena, VAddr device_a
                         magic_enum::enum_name(meta->type));
         }
     }
-    const ImageId image_id = texture_cache.FindImageFromRange(device_addr, size);
+    if (!image_id) {
+        image_id = texture_cache.FindImageFromRange(device_addr, size);
+    }
     if (!image_id) {
         return false;
     }
@@ -527,6 +530,14 @@ bool BufferCache::SynchronizeMemoryFromImage(const Buffer* arena, VAddr device_a
     auto& tile_manager = texture_cache.GetTileManager();
     tile_manager.TileImage(image, buffer_copies, arena, arena_offset);
     return true;
+}
+
+void BufferCache::WriteImageToMemory(ImageId image_id) {
+    const Image& image = texture_cache.GetImage(image_id);
+    const VAddr device_addr = image.info.guest_address;
+    const u32 size = image.info.guest_size;
+    const Buffer* arena = ObtainBuffer(device_addr, size, ObtainBufferFlags::IsWritten).first;
+    SynchronizeMemoryFromImage(arena, device_addr, size, image_id);
 }
 
 void BufferCache::SubmitPendingArenaBinds(Vulkan::SubmitInfo& info) {
