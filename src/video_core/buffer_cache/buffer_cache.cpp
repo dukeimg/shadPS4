@@ -503,7 +503,10 @@ bool BufferCache::SynchronizeMemoryFromImage(const Buffer* arena, VAddr device_a
         const auto& mip_info = image.info.mips_layout[mip];
         const u32 width = std::max(image.info.size.width >> mip, 1u);
         const u32 height = std::max(image.info.size.height >> mip, 1u);
-        const u32 depth = std::max(image.info.size.depth >> mip, 1u);
+        const u32 depth =
+            image.info.props.is_volume ? std::max(image.info.size.depth >> mip, 1u) : 1u;
+        const u32 extent_width = mip_info.pitch ? std::min<u32>(mip_info.pitch, width) : width;
+        const u32 extent_height = mip_info.height ? std::min<u32>(mip_info.height, height) : height;
         if (arena_offset + mip_info.offset + mip_info.size > arena->size_bytes) {
             break;
         }
@@ -518,7 +521,7 @@ bool BufferCache::SynchronizeMemoryFromImage(const Buffer* arena, VAddr device_a
                 .layerCount = image.info.resources.layers,
             },
             .imageOffset = {0, 0, 0},
-            .imageExtent = {width, height, depth},
+            .imageExtent = {extent_width, extent_height, depth},
         });
     }
     if (buffer_copies.empty()) {
