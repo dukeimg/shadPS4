@@ -561,8 +561,13 @@ ImageId TextureCache::ExpandImage(const ImageInfo& info, ImageId image_id) {
     auto& src_image = slot_images[image_id];
     auto& new_image = slot_images[new_image_id];
 
+    const bool src_in_memory = True(src_image.flags & ImageFlagBits::Dirty) ||
+                               (True(src_image.flags & ImageFlagBits::NeedsWriteBack) &&
+                                !(src_image.aspect_mask & vk::ImageAspectFlagBits::eStencil));
     RefreshImage(new_image);
-    runtime.CopyImage(&src_image, &new_image);
+    if (!src_in_memory) {
+        runtime.CopyImage(&src_image, &new_image);
+    }
 
     if (src_image.binding.is_bound || src_image.binding.is_target) {
         src_image.binding.needs_rebind = 1u;
