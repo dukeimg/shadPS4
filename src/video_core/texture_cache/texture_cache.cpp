@@ -902,8 +902,43 @@ void TextureCache::WriteBackImage(Image& image) {
         return;
     }
     image.flags &= ~ImageFlagBits::NeedsWriteBack;
-    if (False(image.flags & ImageFlagBits::Dirty)) {
+    if (True(image.flags & ImageFlagBits::Dirty)) {
+        return;
+    }
+    if (!image.binding.is_bound && !image.binding.is_target) {
         buffer_cache.WriteImageToMemory(slot_images.GetSlotId(image));
+        return;
+    }
+    // The image may already have a descriptor or attachment in this draw, so give it back the
+    // layout it had before the copy.
+    const auto* backing = image.backing;
+    const auto state = backing->state;
+    const auto subresource_states = backing->subresource_states;
+    buffer_cache.WriteImageToMemory(slot_images.GetSlotId(image));
+    if (image.backing != backing) {
+        return;
+    }
+    bool needs_flush = false;
+    if (subresource_states.empty()) {
+        if (state.layout != vk::ImageLayout::eUndefined) {
+            needs_flush = runtime.Transit(&image, state.layout, state.pl_stage, state.access_mask);
+        }
+    } else {
+        for (u16 mip = 0; mip < image.info.resources.levels; ++mip) {
+            for (u16 layer = 0; layer < image.info.resources.layers; ++layer) {
+                const auto& subresource_state =
+                    subresource_states[mip * image.info.resources.layers + layer];
+                if (subresource_state.layout == vk::ImageLayout::eUndefined) {
+                    continue;
+                }
+                needs_flush |= runtime.Transit(
+                    &image, subresource_state.layout, subresource_state.pl_stage,
+                    subresource_state.access_mask, SubresourceRange{{mip, layer}, {1, 1}});
+            }
+        }
+    }
+    if (needs_flush) {
+        runtime.FlushBarriers();
     }
 }
 
