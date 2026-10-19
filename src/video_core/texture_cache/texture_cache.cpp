@@ -196,6 +196,10 @@ void TextureCache::InvalidateMemory(VAddr addr, size_t size) {
     }
 }
 
+void TextureCache::WriteBackMemory(VAddr addr, size_t size) {
+    ForEachImageInRegion(addr, size, [&](ImageId, Image& image) { WriteBackImage(image); });
+}
+
 void TextureCache::InvalidateMemoryFromGPU(VAddr address, size_t max_size) {
     ForEachImageInRegion(address, max_size, [&](ImageId image_id, Image& image) {
         WriteBackImage(image);
