@@ -35,7 +35,8 @@ enum ImageFlagBits : u32 {
     Dirty = MaybeCpuDirty | CpuDirty | GpuDirty,
     GpuModified = 1 << 3,   ///< Contents have been modified from the GPU
     MaybeGpuDirty = 1 << 4, ///< Image contents may have been modified in the buffer cache
-    Registered = 1 << 6,    ///< True when the image is registered
+    NeedsWriteBack = 1 << 5,
+    Registered = 1 << 6, ///< True when the image is registered
 };
 DECLARE_ENUM_FLAG_OPERATORS(ImageFlagBits)
 
@@ -110,9 +111,13 @@ struct Image : public Common::LRUNode<> {
         return True(flags & ImageFlagBits::GpuModified) && False(flags & ImageFlagBits::Dirty);
     }
 
-    bool CanBeDownloaded() {
-        return HasGpuValidData() && info.num_samples == 1 && !info.props.has_stencil &&
+    bool CanBeWrittenBack() {
+        return info.num_samples == 1 && !info.props.has_stencil &&
                IsVulkanFormatCompatible(info.pixel_format, backing->image.image_ci.format);
+    }
+
+    bool CanBeDownloaded() {
+        return HasGpuValidData() && CanBeWrittenBack();
     }
 
     void AssociateDepth(ImageId depth_image_id, u64 depth_image_uid) {

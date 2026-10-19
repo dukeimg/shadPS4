@@ -4,6 +4,7 @@
 #pragma once
 
 #include <deque>
+#include <span>
 #include <boost/container/small_vector.hpp>
 
 #include "common/enum.h"
@@ -43,6 +44,7 @@ enum class ObtainBufferFlags {
     IsTexelBuffer = 1 << 1,
     IgnoreStreamBuffer = 1 << 2,
     InvalidateTextureCache = 1 << 3,
+    IgnoreTextureCache = 1 << 4,
 };
 DECLARE_ENUM_FLAG_OPERATORS(ObtainBufferFlags)
 
@@ -111,6 +113,8 @@ public:
     /// Attempts to obtain a buffer without modifying the cache contents.
     [[nodiscard]] std::pair<const Buffer*, u64> ObtainBufferForImage(VAddr device_addr, u32 size);
 
+    void WriteImageToMemory(ImageId image_id);
+
     /// Return true when a region is modified from the CPU
     [[nodiscard]] bool IsRegionCpuModified(VAddr addr, size_t size);
 
@@ -150,7 +154,8 @@ private:
     bool SynchronizeMemory(const Buffer* arena, VAddr device_addr, u32 size, bool is_written,
                            bool is_texel_buffer);
 
-    bool SynchronizeMemoryFromImage(const Buffer* arena, VAddr device_addr, u32 size);
+    bool SynchronizeMemoryFromImage(const Buffer* arena, VAddr device_addr, u32 size,
+                                    std::span<const ImageId> image_ids = {});
 
     const Vulkan::Instance& instance;
     Vulkan::Scheduler& scheduler;
