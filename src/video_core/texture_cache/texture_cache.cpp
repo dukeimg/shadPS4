@@ -203,11 +203,6 @@ void TextureCache::WriteBackMemory(VAddr addr, size_t size) {
 void TextureCache::InvalidateMemoryFromGPU(VAddr address, size_t max_size) {
     ForEachImageInRegion(address, max_size, [&](ImageId image_id, Image& image) {
         WriteBackImage(image);
-        // Only consider images that match base address.
-        // TODO: Maybe also consider subresources
-        if (image.info.guest_address != address) {
-            return;
-        }
         // Ensure image is reuploaded when accessed again.
         image.flags |= ImageFlagBits::GpuDirty;
     });
