@@ -408,8 +408,7 @@ void Rasterizer::OnFence() {
 }
 
 bool Rasterizer::BindResources(const Pipeline* pipeline) {
-    if (IsComputeImageCopy(pipeline) || IsComputeMetaClear(pipeline) ||
-        IsComputeImageClear(pipeline)) {
+    if (IsComputeMetaClear(pipeline) || IsComputeImageClear(pipeline)) {
         return false;
     }
 
@@ -634,63 +633,6 @@ bool Rasterizer::IsComputeMetaClear(const Pipeline* pipeline) {
     return false;
 }
 
-bool Rasterizer::IsComputeImageCopy(const Pipeline* pipeline) {
-    if (!pipeline->IsCompute()) {
-        return false;
-    }
-
-    // Ensure shader only has 2 bound buffers
-    const auto& cs_pgm = liverpool->GetCsRegs();
-    const auto& info = pipeline->GetStage(Shader::SwStage::Compute);
-    if (cs_pgm.num_thread_x.full != 64 || info.buffers.size() < 2 || info.buffers.size() > 3 ||
-        !info.images.empty()) {
-        return false;
-    }
-
-    // Those 2 buffers must both be formatted. One must be source and another destination.
-    const auto& desc0 = info.buffers[0];
-    const auto& desc1 = info.buffers[1];
-    if (!desc0.is_formatted || !desc1.is_formatted || desc0.is_written == desc1.is_written) {
-        return false;
-    }
-    if (info.buffers.size() == 3 && info.buffers[2].buffer_type != Shader::BufferType::Flatbuf) {
-        return false;
-    }
-
-    // Buffers must have the same size and each thread of the dispatch must copy 1 dword of data
-    const AmdGpu::Buffer buf0 = desc0.GetSharp(info);
-    const AmdGpu::Buffer buf1 = desc1.GetSharp(info);
-    if (buf0.GetSize() != buf1.GetSize() || cs_pgm.dim_x != (buf0.GetSize() / 256)) {
-        return false;
-    }
-
-    // Find images the buffer alias
-    const auto image0_id = texture_cache.FindImageFromRange(buf0.base_address, buf0.GetSize());
-    if (!image0_id) {
-        return false;
-    }
-    const auto image1_id =
-        texture_cache.FindImageFromRange(buf1.base_address, buf1.GetSize(), false);
-    if (!image1_id) {
-        return false;
-    }
-
-    // Image copy must be valid
-    VideoCore::Image& image0 = texture_cache.GetImage(image0_id);
-    VideoCore::Image& image1 = texture_cache.GetImage(image1_id);
-    if (image0.info.guest_size != image1.info.guest_size ||
-        image0.info.pitch != image1.info.pitch || image0.info.guest_size != buf0.GetSize() ||
-        image0.info.num_bits != image1.info.num_bits) {
-        return false;
-    }
-
-    // Perform image copy
-    VideoCore::Image& src_image = desc0.is_written ? image1 : image0;
-    VideoCore::Image& dst_image = desc0.is_written ? image0 : image1;
-    runtime.CopyColorAndDepth(&src_image, &dst_image);
-    return true;
-}
-
 bool Rasterizer::IsComputeImageClear(const Pipeline* pipeline) {
     if (!pipeline->IsCompute()) {
         return false;
@@ -749,7 +691,9 @@ bool Rasterizer::IsComputeImageClear(const Pipeline* pipeline) {
             },
         .extent = image1.info.resources,
     };
+    texture_cache.UpdateImage(image1_id);
     runtime.ClearImage(&image1, range, clear);
+    texture_cache.MarkGpuWrite(image1_id);
     return true;
 }
 
